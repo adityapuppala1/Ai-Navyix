@@ -7,6 +7,8 @@ COPY apps/api/package.json apps/api/package.json
 COPY packages/policy/package.json packages/policy/package.json
 RUN pnpm install --no-frozen-lockfile
 COPY apps/web apps/web
+COPY packages/workflow/src packages/workflow/src
+COPY scripts/sync-workbench.mjs scripts/sync-workbench.mjs
 COPY tsconfig.base.json ./
 RUN pnpm --filter @navyix/web build
 FROM node:22-alpine

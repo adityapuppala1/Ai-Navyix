@@ -1,23 +1,15 @@
 'use client';
-import Link from'next/link';import{useState}from'react';
-import{ArrowLeft,ArrowRight,Blocks,ChevronDown,CircleHelp,FileCheck2,GitBranch,LayoutDashboard,LockKeyhole,Menu,Search,ShieldCheck,Sparkles,X}from'lucide-react';
-const pages=[{name:'Overview',Icon:LayoutDashboard},{name:'Requirements',Icon:Blocks},{name:'Design records',Icon:FileCheck2},{name:'Builds & tests',Icon:GitBranch},{name:'Readiness',Icon:ShieldCheck}];
-const sample=[
-{id:'NAV-101',name:'Architecture review',group:'Design',state:'Met',description:'Required architecture decisions have reviewer approval.'},
-{id:'NAV-102',name:'Build artifact integrity',group:'Build',state:'Met',description:'Artifact digest matches the selected source revision.'},
-{id:'NAV-103',name:'Authentication test run',group:'Test',state:'Blocked',description:'Required smoke test failed on the selected staging artifact.'},
-{id:'NAV-104',name:'Provider integration',group:'Test',state:'Unknown',description:'No compatible execution evidence was imported.'},
-{id:'NAV-105',name:'Performance evidence',group:'Release',state:'Stale',description:'Previous evidence predates the current artifact.'}];
-export default function Workspace(){
- const[active,setActive]=useState('Overview');const[selected,setSelected]=useState(sample[2]);const[mobile,setMobile]=useState(false);const[search,setSearch]=useState('');
- const filtered=sample.filter(x=>[x.name,x.group,x.id,x.state].join(' ').toLowerCase().includes(search.toLowerCase()));
- return <div className="app-shell"><a className="skip-link" href="#main">Skip to main content</a>
- <aside className={'app-sidebar '+(mobile?'is-open':'')} aria-label="Workspace navigation"><div className="side-head"><Link href="/" className="wordmark"><span className="brand-mark">N</span>NAVYIX</Link><button className="icon-btn mobile-close" aria-label="Close navigation" onClick={()=>setMobile(false)}><X size={18}/></button></div><div className="org-control"><span className="org-icon">A</span><span>Acme Systems<small>Demo organization</small></span><ChevronDown size={15}/></div><div className="sidebar-label">WORKSPACE</div><nav className="sidebar-nav">{pages.map(({name,Icon})=><button key={name} className={active===name?'active':''} onClick={()=>{setActive(name);setMobile(false)}}><Icon size={18}/>{name}</button>)}</nav><div className="sidebar-bottom"><div className="side-info"><Sparkles size={18}/><div><b>AI assistance</b><span>Not connected in preview</span></div></div><div className="side-info"><LockKeyhole size={18}/><div><b>Access controls</b><span>Demo data only</span></div></div><Link href="/"><ArrowLeft size={15}/> Back to homepage</Link></div></aside>
- <div className="app-content"><header className="app-topbar"><button className="icon-btn mobile-menu" onClick={()=>setMobile(true)} aria-label="Open navigation"><Menu size={20}/></button><div className="crumb">Projects <span>/</span> <b>Customer Platform</b> <span>/</span> {active}</div><div className="top-actions"><span className="demo-pill">INTERACTIVE UI DEMO</span><button className="icon-btn" title="This is a non-production preview" aria-label="Help information"><CircleHelp size={18}/></button></div></header>
- <main id="main" className="app-main"><div className="workspace-title"><div><div className="eyebrow">ENGINEERING INTELLIGENCE / DEMONSTRATION</div><h1>{active==='Overview'?'Delivery readiness':active}</h1><p>Customer Platform <span>·</span> Release 0.4 <span>·</span> Staging</p></div><button className="button ghost-btn" disabled title="Authentication and API required">Export assessment <ArrowRight size={16}/></button></div>
- <div className="notice"><Sparkles size={17}/><span>Sample records for design evaluation only. No real tenant data, CI evidence, or authenticated readiness decision is connected.</span></div>
- <section className="metric-grid" aria-label="Illustrative readiness summary"><article className="metric-card"><span>Readiness status</span><strong className="metric-status">Blocked</strong><small>2 criteria need attention</small></article><article className="metric-card"><span>Mandatory checks</span><strong>3 <small>/ 5</small></strong><small>Demonstration results</small></article><article className="metric-card"><span>Evidence freshness</span><strong>80%</strong><small>1 stale record</small></article><article className="metric-card"><span>Connected requirements</span><strong>24</strong><small>Illustrative project</small></article></section>
- <div className="workspace-grid"><section className="workspace-panel"><div className="panel-heading"><div><h2>Readiness criteria</h2><p>Inspect missing evidence, failures and required actions.</p></div><span className="tag-muted">Policy v3 · Preview</span></div><label className="search-field"><Search size={17}/><span className="sr-only">Search criteria</span><input placeholder="Filter criteria, status, or ID" value={search} onChange={e=>setSearch(e.target.value)}/></label><div className="criteria-list">{filtered.length?filtered.map(c=><button key={c.id} onClick={()=>setSelected(c)} className={'criterion '+(selected.id===c.id?'selected':'')}><span className="criteria-icon"><FileCheck2 size={18}/></span><span className="criterion-main"><strong>{c.name}</strong><small>{c.id} · {c.group}</small></span><span className={'state-pill '+c.state.toLowerCase()}>{c.state}</span><ArrowRight size={17}/></button>):<p className="empty-state">No criteria match your search.</p>}</div></section>
- <section className="detail-panel"><div className="panel-heading"><div className="eyebrow">EVIDENCE INSPECTOR</div><span className={'state-pill '+selected.state.toLowerCase()}>{selected.state}</span></div><div className="detail-title"><div className="detail-glyph"><ShieldCheck size={24}/></div><h2>{selected.name}</h2><p>{selected.description}</p></div><div className="evidence-data"><div><span>Criterion</span><b>{selected.id}</b></div><div><span>Artifact</span><b>sha256:8a7... (sample)</b></div><div><span>Environment</span><b>Staging (sample)</b></div><div><span>Evidence status</span><b>{selected.state}</b></div></div><div className="next-action"><b>Suggested next action</b><p>{selected.state==='Met'?'No action needed for this illustrative criterion.':selected.state==='Blocked'?'Investigate the failing test and import fresh evidence.':selected.state==='Unknown'?'Connect a source and import an execution result.':'Reevaluate evidence against the selected artifact.'}</p></div><button className="button primary full-width" disabled title="AI is not connected"><Sparkles size={17}/> Explain with AI (coming soon)</button></section></div><div className="workspace-footnote"><ShieldCheck size={15}/> Production assessments will verify artifact, environment, policy, evidence and access before recording a decision.</div>
- </main></div>{mobile&&<button className="mobile-overlay" aria-label="Close navigation" onClick={()=>setMobile(false)}/>}</div>;
+
+import { createElement } from 'react';
+import Script from 'next/script';
+
+/** Shared native component: canonical sources are copied by the pre-build script. */
+export default function Workspace() {
+  return (
+    <>
+      <Script src="/workbench/app.mjs" type="module" strategy="afterInteractive" />
+      {createElement('navyix-workbench')}
+      <noscript>Enable JavaScript to use the Navyix local workbench.</noscript>
+    </>
+  );
 }

@@ -11,3 +11,7 @@ coverage/
 *.log
 .DS_Store
 *.tsbuildinfo
+# Generated from canonical workbench sources
+apps/web/public/workbench/
+test-artifacts/
+__pycache__/
