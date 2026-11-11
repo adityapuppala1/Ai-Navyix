@@ -7,7 +7,8 @@ export function evaluateReadiness(criteria,context) {
   const now=Date.parse(context.now);if(!Number.isFinite(now))throw new TypeError('Invalid evaluation timestamp');
   const ids=new Set();const results=criteria.map(c=>{
     if(!c.id||ids.has(c.id))throw new TypeError('Criterion IDs must be unique');ids.add(c.id);
-    if(!Object.values(CRITERION_STATES).includes(c.state))throw new TypeError('Unsupported criterion state');
+    if(!Object.values(CRITERION_STATES).includes(c.state)||c.state==='EXCEPTION_ACCEPTED')throw new TypeError('Unsupported input criterion state');
+    if(c.mandatory&&c.state==='NOT_APPLICABLE')throw new TypeError('Mandatory criterion applicability requires an authorized policy decision');
     const ex=c.exception;const validException=c.mandatory&&c.state==='UNMET'&&ex?.authorized===true&&
       ex.targetDigest===context.targetDigest&&ex.policyVersion===context.policyVersion&&ex.environmentId===context.environmentId&&
       Number.isFinite(Date.parse(ex.expiresAt))&&Date.parse(ex.expiresAt)>now;

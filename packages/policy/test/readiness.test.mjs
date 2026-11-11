@@ -13,3 +13,6 @@ test('mandatory failure outranks insufficient',()=>assert.equal(evaluateReadines
 test('duplicate criteria fail closed',()=>assert.throws(()=>evaluateReadiness([...c('MET'),...c('MET')],ctx)));
 test('unknown states fail closed',()=>assert.throws(()=>evaluateReadiness(c('SKIPPED'),ctx)));
 test('missing target fails closed',()=>assert.throws(()=>evaluateReadiness(c('MET'),{...ctx,targetDigest:''})));
+
+test('cannot forge accepted exception through input state',()=>assert.throws(()=>evaluateReadiness(c('EXCEPTION_ACCEPTED'),ctx)));
+test('mandatory check cannot be silently marked not applicable',()=>assert.throws(()=>evaluateReadiness(c('NOT_APPLICABLE'),ctx)));

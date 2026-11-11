@@ -16,6 +16,7 @@ Prerequisites: Node.js >= 22, Corepack/pnpm 9, Docker (for PostgreSQL).
 corepack enable
 pnpm install
 cp .env.example .env
+cp .env.example apps/api/.env
 # Start a local database (or use an existing PostgreSQL instance):
 docker compose up -d db
 pnpm --filter @navyix/api db:generate
