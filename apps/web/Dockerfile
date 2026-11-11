@@ -5,6 +5,7 @@ COPY package.json pnpm-workspace.yaml .npmrc ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY packages/policy/package.json packages/policy/package.json
+COPY packages/server/package.json packages/server/package.json
 RUN pnpm install --no-frozen-lockfile
 COPY apps/web apps/web
 COPY packages/workflow/src packages/workflow/src

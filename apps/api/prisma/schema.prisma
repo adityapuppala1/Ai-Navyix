@@ -1,150 +1,221 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
-enum MembershipRole { OWNER ADMIN CONTRIBUTOR REVIEWER VIEWER }
-enum EvidenceState { CURRENT STALE REVOKED }
-enum GrantState { ACTIVE REVOKED EXPIRED }
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+  directUrl = env("MIGRATION_DATABASE_URL")
+}
+enum MembershipRole {
+  OWNER
+  ADMIN
+  CONTRIBUTOR
+  REVIEWER
+  VIEWER
+}
+enum EvidenceState {
+  CURRENT
+  STALE
+  REVOKED
+}
+enum GrantState {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
 model User {
- id String @id @default(uuid()) @db.Uuid
- oidcSubject String @unique
- email String @unique
- createdAt DateTime @default(now())
- memberships Membership[]
+  id String @id @default(uuid()) @db.Uuid
+  oidcIssuer String
+  oidcSubject String
+  email String @unique
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  memberships Membership[]
+  @@unique([oidcIssuer, oidcSubject])
 }
 model Organization {
- id String @id @default(uuid()) @db.Uuid
- name String
- slug String @unique
- createdAt DateTime @default(now())
- memberships Membership[]
- projects Project[]
- aiGrants AiSourceGrant[]
- auditEvents AuditEvent[]
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  slug String @unique
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  memberships Membership[]
+  projects Project[]
+  aiGrants AiSourceGrant[]
+  auditEvents AuditEvent[]
 }
 model Membership {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- userId String @db.Uuid
- role MembershipRole
- active Boolean @default(true)
- org Organization @relation(fields:[orgId],references:[id])
- user User @relation(fields:[userId],references:[id])
- @@unique([orgId,userId])
- @@index([userId,orgId])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  userId String @db.Uuid
+  role MembershipRole
+  active Boolean @default(true)
+  org Organization @relation(fields:[orgId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+  projectMemberships ProjectMembership[]
+  commands WorkflowCommand[]
+  snapshots WorkflowSnapshot[]
+  @@unique([orgId,userId])
+  @@index([userId,orgId])
 }
 model Project {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- name String
- key String
- createdAt DateTime @default(now())
- org Organization @relation(fields:[orgId],references:[id])
- requirements Requirement[]
- artifacts Artifact[]
- evidence Evidence[]
- policies PolicyVersion[]
- assessments Assessment[]
- @@unique([orgId,key])
- @@unique([orgId,id])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  name String
+  key String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  org Organization @relation(fields:[orgId],references:[id])
+  requirements Requirement[]
+  artifacts Artifact[]
+  evidence Evidence[]
+  policies PolicyVersion[]
+  assessments Assessment[]
+  members ProjectMembership[]
+  workflow WorkflowState?
+  workflowSnapshots WorkflowSnapshot[]
+  @@unique([orgId,key])
+  @@unique([orgId,id])
+}
+model ProjectMembership {
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  userId String @db.Uuid
+  role MembershipRole
+  active Boolean @default(true)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  membership Membership @relation(fields:[orgId,userId],references:[orgId,userId])
+  @@id([orgId,projectId,userId])
+}
+// Bounded, server-owned project aggregate for the first workflow slice.
+// The normalized tables below remain reserved; they are not a second source of truth.
+model WorkflowState {
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  revision Int
+  data Json
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  @@id([orgId,projectId])
+}
+model WorkflowCommand {
+  orgId String @db.Uuid
+  actorId String @db.Uuid
+  requestId String @db.Uuid
+  requestHash String
+  result Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  membership Membership @relation(fields:[orgId,actorId],references:[orgId,userId])
+  @@id([orgId,actorId,requestId])
+}
+model WorkflowSnapshot {
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  id String
+  actorId String @db.Uuid
+  data Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  membership Membership @relation(fields:[orgId,actorId],references:[orgId,userId])
+  @@id([orgId,projectId,id])
 }
 model Requirement {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- projectId String @db.Uuid
- externalKey String
- currentVersion Int @default(1)
- project Project @relation(fields:[orgId,projectId],references:[orgId,id])
- revisions RequirementVersion[]
- @@unique([orgId,projectId,externalKey])
- @@unique([orgId,id])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  externalKey String
+  currentVersion Int @default(1)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  revisions RequirementVersion[]
+  @@unique([orgId,projectId,externalKey])
+  @@unique([orgId,id])
 }
 model RequirementVersion {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- requirementId String @db.Uuid
- version Int
- title String
- description String @db.Text
- acceptance Json
- createdAt DateTime @default(now())
- requirement Requirement @relation(fields:[orgId,requirementId],references:[orgId,id])
- @@unique([orgId,requirementId,version])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  requirementId String @db.Uuid
+  version Int
+  title String
+  description String @db.Text
+  acceptance Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  requirement Requirement @relation(fields:[orgId,requirementId],references:[orgId,id])
+  @@unique([orgId,requirementId,version])
 }
 model Artifact {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- projectId String @db.Uuid
- digest String
- commitSha String?
- environment String
- collectedAt DateTime @default(now())
- project Project @relation(fields:[orgId,projectId],references:[orgId,id])
- @@unique([orgId,projectId,digest,environment])
- @@unique([orgId,id])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  digest String
+  commitSha String?
+  environment String
+  collectedAt DateTime @default(now()) @db.Timestamptz(3)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  @@unique([orgId,projectId,digest,environment])
+  @@unique([orgId,id])
 }
 model Evidence {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- projectId String @db.Uuid
- source String
- sourceRef String
- digest String
- objectKey String?
- state EvidenceState @default(CURRENT)
- observedAt DateTime
- collectedAt DateTime @default(now())
- project Project @relation(fields:[orgId,projectId],references:[orgId,id])
- @@unique([orgId,source,sourceRef,digest])
- @@unique([orgId,id])
- @@index([orgId,projectId,state])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  source String
+  sourceRef String
+  digest String
+  objectKey String?
+  state EvidenceState @default(CURRENT)
+  observedAt DateTime @db.Timestamptz(3)
+  collectedAt DateTime @default(now()) @db.Timestamptz(3)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  @@unique([orgId,source,sourceRef,digest])
+  @@unique([orgId,id])
+  @@index([orgId,projectId,state])
 }
 model PolicyVersion {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- projectId String @db.Uuid
- version Int
- rules Json
- createdAt DateTime @default(now())
- project Project @relation(fields:[orgId,projectId],references:[orgId,id])
- assessments Assessment[]
- @@unique([orgId,projectId,version])
- @@unique([orgId,id])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  version Int
+  rules Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  assessments Assessment[]
+  @@unique([orgId,projectId,version])
+  @@unique([orgId,id])
 }
 model Assessment {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- projectId String @db.Uuid
- targetDigest String
- environment String
- policyVersionId String @db.Uuid
- status String
- criterionResult Json
- evidenceRefs Json
- evaluatedAt DateTime @default(now())
- project Project @relation(fields:[orgId,projectId],references:[orgId,id])
- policy PolicyVersion @relation(fields:[orgId,policyVersionId],references:[orgId,id])
- @@index([orgId,projectId,evaluatedAt])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  projectId String @db.Uuid
+  targetDigest String
+  environment String
+  policyVersionId String @db.Uuid
+  status String
+  criterionResult Json
+  evidenceRefs Json
+  evaluatedAt DateTime @default(now()) @db.Timestamptz(3)
+  project Project @relation(fields:[orgId,projectId],references:[orgId,id])
+  policy PolicyVersion @relation(fields:[orgId,policyVersionId],references:[orgId,id])
+  @@index([orgId,projectId,evaluatedAt])
 }
 model AiSourceGrant {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- scope Json
- purposes Json
- provider String
- state GrantState @default(ACTIVE)
- validUntil DateTime?
- createdAt DateTime @default(now())
- org Organization @relation(fields:[orgId],references:[id])
- @@index([orgId,state])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  scope Json
+  purposes Json
+  provider String
+  state GrantState @default(ACTIVE)
+  validUntil DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  org Organization @relation(fields:[orgId],references:[id])
+  @@index([orgId,state])
 }
 model AuditEvent {
- id String @id @default(uuid()) @db.Uuid
- orgId String @db.Uuid
- actorId String?
- action String
- entityType String
- entityId String
- metadata Json
- createdAt DateTime @default(now())
- org Organization @relation(fields:[orgId],references:[id])
- @@index([orgId,createdAt])
+  id String @id @default(uuid()) @db.Uuid
+  orgId String @db.Uuid
+  actorId String?
+  action String
+  entityType String
+  entityId String
+  metadata Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  org Organization @relation(fields:[orgId],references:[id])
+  @@index([orgId,createdAt])
 }

@@ -11,8 +11,9 @@
     "build": "pnpm --filter @navyix/policy build && pnpm --filter @navyix/api build && pnpm --filter @navyix/web build",
     "typecheck": "pnpm --filter @navyix/policy typecheck && pnpm --filter @navyix/api typecheck && pnpm --filter @navyix/web typecheck",
     "lint": "pnpm --filter @navyix/web lint && pnpm --filter @navyix/api lint",
-    "test": "node --test packages/policy/test/*.test.mjs packages/workflow/test/*.test.mjs",
+    "test": "node --test packages/policy/test/*.test.mjs packages/workflow/test/*.test.mjs packages/server/test/*.test.mjs",
     "test:workflow": "node --test packages/workflow/test/*.test.mjs",
+    "test:server": "node --test packages/server/test/*.test.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "sync:workbench": "node scripts/sync-workbench.mjs"
   },

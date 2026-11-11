@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer, request as httpRequest } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { createHttpHandler } from '../src/http.mjs';
+import { WorkflowService } from '../src/service.mjs';
+import { ApiError } from '../src/errors.mjs';
+import { MemoryRepository, A, B, OWNER } from './support/memory.mjs';
+async function setup(t, override={}) {
+  const repo=new MemoryRepository(),service=new WorkflowService(repo);
+  const server=createServer(createHttpHandler({service,authenticate:async header=>{if(header!=='Bearer fixture')throw new ApiError(401,'UNAUTHENTICATED','Access token required.');return OWNER;},...override}));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const send=(path='',options={})=>fetch(`${base}/v1/orgs/${A}/projects${path}`,{...options,headers:{Authorization:'Bearer fixture',...options.headers}});
+  const create=()=>send('',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({name:'Portal',goal:'Ship verified',owner:'Team'})});
+  return {send,create,base,repo};
+}
+test('real HTTP server: create, read, command and readiness endpoints',async t=>{const f=await setup(t),created=await f.create();assert.equal(created.status,201);const {projectId}=await created.json();let r=await f.send('/'+projectId);assert.equal(r.status,200);const project=await r.json();assert.equal(project.revision,1);r=await f.send('/'+projectId+'/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({expectedRevision:1,type:'requirement.add',input:{title:'Login',acceptance:'OTP required'}})});assert.equal(r.status,200);r=await f.send('/'+projectId+'/readiness?stage=design');assert.equal((await r.json()).status,'Ready');});
+test('unauthenticated HTTP requests rejected',async t=>{const f=await setup(t),r=await f.send('',{headers:{Authorization:''}});assert.equal(r.status,401);});
+test('cross-tenant HTTP read denied',async t=>{const f=await setup(t);const r=await fetch(`${f.base}/v1/orgs/${B}/projects`,{headers:{Authorization:'Bearer fixture'}});assert.equal(r.status,404);});
+test('error responses are JSON and no-store',async t=>{const f=await setup(t),r=await f.send('/bad');assert.equal(r.status,400);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('x-content-type-options'),'nosniff');assert.ok((await r.json()).error.requestId);assert.equal(r.headers.get('access-control-allow-origin'),null);});
+test('JSON is required on writes',async t=>{const f=await setup(t),r=await f.send('',{method:'POST',headers:{'Content-Type':'text/plain'},body:'{}'});assert.equal(r.status,415);});
+test('malformed JSON is rejected',async t=>{const f=await setup(t),r=await f.send('',{method:'POST',headers:{'Content-Type':'application/json'},body:'{'});assert.equal(r.status,400);assert.equal((await r.json()).error.code,'INVALID_JSON');});
+test('HTTP size limit rejects oversized request',async t=>{const f=await setup(t),r=await f.send('',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x:'a'.repeat(1_000_001)})});assert.equal(r.status,413);});
+test('compressed body rejected',async t=>{const f=await setup(t),r=await f.send('',{method:'POST',headers:{'Content-Type':'application/json','Content-Encoding':'gzip'},body:'{}'});assert.equal(r.status,415);});
+test('write without idempotency key fails',async t=>{const f=await setup(t),r=await f.send('',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(r.status,400);});
+test('unknown query and duplicate query are rejected',async t=>{const f=await setup(t);for(const q of ['?role=OWNER','?limit=1&limit=2','?limit=1.5','?limit=99'])assert.equal((await f.send(q)).status,400);});
+test('unsupported HTTP methods are rejected',async t=>{const f=await setup(t),r=await f.send('',{method:'DELETE'});assert.equal(r.status,405);});
+test('URL decoding failures do not leak stack',async t=>{const f=await setup(t),r=await f.send('/%ZZ');assert.equal(r.status,400);assert.equal((await r.json()).error.code,'INVALID_PATH');});
+test('internal database errors are sanitized',async t=>{const observed=[];const f=await setup(t,{service:{list:async()=>{throw new Error('postgres://admin:secret@db/private');}},onError:e=>observed.push(e)});const r=await f.send();assert.equal(r.status,500);assert.ok(!(await r.text()).includes('secret'));assert.equal(Object.keys(observed[0]).length,2);});
+test('duplicate Authorization headers rejected before authentication',async t=>{const f=await setup(t);const status=await new Promise((resolve,reject)=>{const r=httpRequest(f.base+`/v1/orgs/${A}/projects`,{headers:{Authorization:['Bearer fixture','Bearer fixture']}},res=>{res.resume();resolve(res.statusCode);});r.on('error',reject);r.end();});assert.equal(status,401);});

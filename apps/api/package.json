@@ -7,8 +7,11 @@
     "build": "nest build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src --max-warnings=0",
-    "db:generate": "prisma generate",
-    "db:migrate:dev": "prisma migrate dev"
+    "db:generate": "node scripts/prisma.mjs generate",
+    "db:migrate:dev": "node scripts/prisma.mjs migrate dev",
+    "db:migrate:deploy": "node scripts/prisma.mjs migrate deploy",
+    "db:validate": "node scripts/prisma.mjs validate",
+    "org:bootstrap": "node --env-file=../../.env scripts/bootstrap-organization.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -19,7 +22,9 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@navyix/server": "workspace:*",
+    "jose": "^6.1.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
