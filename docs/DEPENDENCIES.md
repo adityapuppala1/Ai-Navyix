@@ -1,0 +1,4 @@
+# Dependencies and setup limitations
+Node 22+, pnpm 9, TypeScript 5; Next.js/React, Three.js/React Three Fiber/Drei, Lucide; NestJS, Prisma/PostgreSQL 17; Docker. AWS S3/SQS/OIDC/AI SDKs must be added only with implementation tickets.
+Versions here are range declarations and **no pnpm-lock.yaml is present**: npm registry was unavailable while scaffolding. In an internet-enabled environment run `corepack enable && pnpm install`, pin/commit lockfile, then `pnpm typecheck && pnpm test && pnpm build` plus Prisma generate/migrations and Docker/browser smoke validation. Manual workflow currently installs without frozen lockfile until committed.
+Avoid unused services like Kafka/Kubernetes/graph DB. Add TanStack, design component library, observability and testing SDKs when corresponding modules start.

@@ -1,0 +1,15 @@
+import{test}from'node:test';import assert from'node:assert/strict';import{evaluateReadiness}from'../src/index.mjs';
+const ctx={targetDigest:'sha256:known',policyVersion:'3',environmentId:'staging',now:'2026-11-11T09:00:00Z'};
+const c=(state,mandatory=true)=>[{id:'ci-smoke',state,mandatory}];
+test('all mandatory checks met',()=>assert.equal(evaluateReadiness(c('MET'),ctx).status,'READY'));
+test('failed check blocks',()=>assert.equal(evaluateReadiness(c('UNMET'),ctx).status,'BLOCKED'));
+test('missing evidence insufficient',()=>assert.equal(evaluateReadiness(c('UNKNOWN'),ctx).status,'INSUFFICIENT_EVIDENCE'));
+test('stale evidence insufficient',()=>assert.equal(evaluateReadiness(c('STALE'),ctx).status,'INSUFFICIENT_EVIDENCE'));
+test('advisory failure nonblocking',()=>assert.equal(evaluateReadiness(c('UNMET',false),ctx).status,'READY'));
+test('valid exception conditional not pass',()=>{let e={authorized:true,expiresAt:'2026-11-12T09:00:00Z',targetDigest:ctx.targetDigest,policyVersion:ctx.policyVersion,environmentId:ctx.environmentId};let r=evaluateReadiness([{...c('UNMET')[0],exception:e}],ctx);assert.equal(r.status,'READY_WITH_CONDITIONS');assert.equal(r.results[0].originalState,'UNMET')});
+test('expired exception remains blocked',()=>{let e={authorized:true,expiresAt:'2026-11-10T09:00:00Z',targetDigest:ctx.targetDigest,policyVersion:ctx.policyVersion,environmentId:ctx.environmentId};assert.equal(evaluateReadiness([{...c('UNMET')[0],exception:e}],ctx).status,'BLOCKED')});
+test('wrong artifact exception remains blocked',()=>{let e={authorized:true,expiresAt:'2026-11-12T09:00:00Z',targetDigest:'sha256:other',policyVersion:ctx.policyVersion,environmentId:ctx.environmentId};assert.equal(evaluateReadiness([{...c('UNMET')[0],exception:e}],ctx).status,'BLOCKED')});
+test('mandatory failure outranks insufficient',()=>assert.equal(evaluateReadiness([...c('UNKNOWN'),{id:'security',state:'UNMET',mandatory:true}],ctx).status,'BLOCKED'));
+test('duplicate criteria fail closed',()=>assert.throws(()=>evaluateReadiness([...c('MET'),...c('MET')],ctx)));
+test('unknown states fail closed',()=>assert.throws(()=>evaluateReadiness(c('SKIPPED'),ctx)));
+test('missing target fails closed',()=>assert.throws(()=>evaluateReadiness(c('MET'),{...ctx,targetDigest:''})));

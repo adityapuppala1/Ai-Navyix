@@ -1,0 +1,18 @@
+{
+  "name": "navyix",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @navyix/web --filter @navyix/api dev",
+    "build": "pnpm --filter @navyix/policy build && pnpm --filter @navyix/api build && pnpm --filter @navyix/web build",
+    "typecheck": "pnpm --filter @navyix/policy typecheck && pnpm --filter @navyix/api typecheck && pnpm --filter @navyix/web typecheck",
+    "test": "node --test packages/policy/test/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
