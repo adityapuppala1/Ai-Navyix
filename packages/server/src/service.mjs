@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createProject, applyCommand, assessProject, reportTemplate } from '../../workflow/src/workflow.mjs';
 import { ApiError, denied, object, uuid } from './errors.mjs';
+import { isTransactionConflict } from './transaction-errors.mjs';
 
 // Explicit allowlist: input cannot replace a project, forge approvals, or supply actor IDs.
 const fields = Object.freeze({
@@ -54,7 +55,7 @@ export class WorkflowService {
     const context = scope(principal, orgId);
     try { return await this.repository.transaction(context, fn); }
     catch (error) {
-      if (error?.code === 'P2034' || error?.code === '40001' || error?.code === '40P01' || error?.code === '23505' || error?.code === 'P2002')
+      if (isTransactionConflict(error))
         throw new ApiError(409, 'CONFLICT', 'Concurrent change. Reload, or retry the same request with its original idempotency key.');
       throw error;
     }

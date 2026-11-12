@@ -12,6 +12,9 @@ async function bootstrap(): Promise<void> {
   const status = app.get(RuntimeStatus);
   const enabled = process.env.NAVYIX_API_ENABLED;
   if (enabled && !['true', 'false'].includes(enabled)) throw new Error('NAVYIX_API_ENABLED must be true or false.');
+  const teamEnabled = process.env.NAVYIX_TEAM_ENABLED;
+  if (teamEnabled && !['true', 'false'].includes(teamEnabled)) throw new Error('NAVYIX_TEAM_ENABLED must be true or false.');
+  if (teamEnabled === 'true' && enabled !== 'true') throw new Error('Team management requires the authenticated API.');
   let disconnect: (() => Promise<void>) | undefined;
   try {
     if (enabled === 'true') {
@@ -24,8 +27,14 @@ async function bootstrap(): Promise<void> {
       await database.$connect();
       const repository = new runtime.PrismaWorkflowRepository(database);
       await repository.assertRuntime();
+      let teamService: InstanceType<typeof runtime.TeamService> | null = null;
+      if (teamEnabled === 'true') {
+        const teamRepository = new runtime.PrismaTeamRepository(database);
+        await teamRepository.assertRuntime();
+        teamService = new runtime.TeamService(teamRepository);
+      }
       app.use('/v1/orgs', runtime.createHttpHandler({
-        service: new runtime.WorkflowService(repository),
+        service: new runtime.WorkflowService(repository), teamService,
         authenticate: runtime.createAuthenticator(config, jose),
         onError: event => console.error(JSON.stringify(event))
       }));

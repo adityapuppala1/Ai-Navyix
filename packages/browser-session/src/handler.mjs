@@ -27,13 +27,13 @@ function redirect(location, cookies) {
   return new Response(null, { status: 303, headers: h });
 }
 function proxyTarget(url, method) {
-  const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
+  const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|team|team/commands|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
   if (!route) reject(404, 'NOT_FOUND', 'Unknown browser API route.');
   const [, , projectId, operation] = route;
-  const allowed = operation === 'commands' || (!projectId && method === 'POST') ? 'POST' : 'GET';
+  const allowed = operation === 'commands' || operation === 'team/commands' || (!projectId && method === 'POST') ? 'POST' : 'GET';
   if (method !== allowed) reject(405, 'METHOD_NOT_ALLOWED', 'Method is not allowed for this route.');
   const keys = [...url.searchParams.keys()];
-  const valid = !projectId && method === 'GET' ? ['after', 'limit'] : operation === 'readiness' ? ['stage', 'buildId', 'environment'] : operation === 'report-template' ? ['buildId'] : [];
+  const valid = (!projectId && method === 'GET') || operation === 'team' ? ['after', 'limit'] : operation === 'readiness' ? ['stage', 'buildId', 'environment'] : operation === 'report-template' ? ['buildId'] : [];
   if (new Set(keys).size !== keys.length || keys.some(k => !valid.includes(k))) reject(400, 'INVALID_QUERY', 'Unexpected or repeated query parameter.');
   for (const [k, v] of url.searchParams) {
     if ((k === 'after' && !id.test(v)) || (k === 'limit' && (!/^\d{1,2}$/.test(v) || +v < 1 || +v > 50)) ||

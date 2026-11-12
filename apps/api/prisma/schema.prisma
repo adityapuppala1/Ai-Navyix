@@ -77,6 +77,7 @@ model Project {
   @@unique([orgId,id])
 }
 model ProjectMembership {
+  accessRevision Int @default(1)
   orgId String @db.Uuid
   projectId String @db.Uuid
   userId String @db.Uuid

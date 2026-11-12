@@ -32,7 +32,7 @@ function query(url, allowed) {
   return value;
 }
 /** Mounted within Nest/Express with bodyParser:false; no separate production server. */
-export function createHttpHandler({ service, authenticate, onError = () => {} }) {
+export function createHttpHandler({ service, authenticate, onError = () => {}, teamService = null }) {
   return async (req, res) => {
     const requestId = randomUUID();
     res.setHeader('Cache-Control', 'no-store');
@@ -51,6 +51,15 @@ export function createHttpHandler({ service, authenticate, onError = () => {} })
       const orgId = parts[2], projectId = parts[4], tail = parts[5];
       if (!['GET', 'POST'].includes(req.method)) {
         res.setHeader('Allow', 'GET, POST'); throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
+      }
+      if (teamService && req.method === 'GET' && parts.length === 6 && tail === 'team') {
+        const q = query(url, ['after', 'limit']);
+        if (q.limit !== undefined && !/^[1-9]\d?$/.test(q.limit)) throw new ApiError(400, 'INVALID_QUERY', 'Limit must be 1–50.');
+        return send(200, await teamService.list(principal, orgId, projectId, { after: q.after, limit: q.limit === undefined ? 20 : Number(q.limit) }));
+      }
+      if (teamService && req.method === 'POST' && parts.length === 7 && tail === 'team' && parts[6] === 'commands') {
+        query(url, []);
+        return send(200, await teamService.change(principal, orgId, projectId, await readJson(req), req.headers['idempotency-key']));
       }
       if (req.method === 'GET' && parts.length === 4) {
         const q = query(url, ['after', 'limit']);

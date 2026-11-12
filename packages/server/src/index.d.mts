@@ -8,8 +8,11 @@ export class PrismaWorkflowRepository {
   assertRuntime(): Promise<void>;
 }
 export class WorkflowService { constructor(repository: PrismaWorkflowRepository, options?: { clock?: () => number }); }
+export class PrismaTeamRepository { constructor(prisma: unknown); assertRuntime(): Promise<void>; }
+export class TeamService { constructor(repository: PrismaTeamRepository); }
 export function createHttpHandler(options: {
   service: WorkflowService;
   authenticate: (authorization: string | undefined) => Promise<Principal>;
   onError?: (event: { requestId: string; code: string }) => void;
+  teamService?: TeamService | null;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
