@@ -5,6 +5,8 @@ const fmt = value => new Date(value).toLocaleString();
 class NavyixInvitations extends HTMLElement {
   constructor() {
     super(); this.attachShadow({ mode: 'open' }); this.orgs = []; this.phase = 'loading'; this.error = ''; this.notice = ''; this.busy = false; this.draft = { email: '', role: 'VIEWER', hours: 24 };
+    this.initialization = 0; this.navigationGuard = false;
+    this.beforeLeave = event => { if (this.client.pending) { event.preventDefault(); event.returnValue = ''; } };
     this.api = new BrowserWorkspace({ onSessionLost: () => this.signedOut() }); this.client = new InvitationClient(this.api);
     this.shadowRoot.addEventListener('click', e => { void this.click(e); });
     this.shadowRoot.addEventListener('submit', e => { void this.submit(e); });
@@ -14,17 +16,40 @@ class NavyixInvitations extends HTMLElement {
     if (this.started) return; this.started = true; this.render(); void this.initialize();
     if (typeof BroadcastChannel !== 'undefined') { this.channel = new BroadcastChannel('navyix-browser-session'); this.channel.onmessage = e => { if (e.data === 'signed-out') this.signedOut(); }; }
     this.pagehide = () => this.signedOut(); window.addEventListener('pagehide', this.pagehide);
+    this.pageshow = event => {
+      if (!event.persisted || !this.isConnected) return;
+      this.signedOut(); this.phase = 'loading'; this.render(); void this.initialize();
+    };
+    window.addEventListener('pageshow', this.pageshow);
   }
-  disconnectedCallback() { this.started = false; this.client.reset(); this.api.generation++; this.api.clear(); this.created = null; this.channel?.close(); clearTimeout(this.timer); window.removeEventListener('pagehide', this.pagehide); }
-  signedOut() { this.busy = false; this.api.generation++; this.api.clear(); this.client.reset(); this.created = null; this.orgs = []; this.draft = { email: '', role: 'VIEWER', hours: 24 }; this.phase = 'signedout'; this.error = ''; this.notice = ''; clearTimeout(this.timer); this.render(); }
+  disconnectedCallback() {
+    this.started = false; this.signedOut(); this.phase = 'loading'; this.channel?.close();
+    window.removeEventListener('pagehide', this.pagehide); window.removeEventListener('pageshow', this.pageshow);
+  }
+  syncNavigationGuard() {
+    const needed = this.isConnected && Boolean(this.client.pending);
+    if (needed === this.navigationGuard) return;
+    this.navigationGuard = needed;
+    if (needed) window.addEventListener('beforeunload', this.beforeLeave);
+    else window.removeEventListener('beforeunload', this.beforeLeave);
+  }
+  signedOut() {
+    this.initialization++; this.busy = false; this.api.generation++; this.api.clear(); this.client.reset();
+    this.created = null; this.orgs = []; this.moreOrganizations = false; this.draft = { email: '', role: 'VIEWER', hours: 24 };
+    this.phase = 'signedout'; this.error = ''; this.notice = ''; clearTimeout(this.timer); this.render();
+  }
   async initialize() {
+    const attempt = ++this.initialization, generation = this.api.generation;
+    const current = () => attempt === this.initialization && generation === this.api.generation && this.isConnected;
     try {
-      if (!await this.api.init()) { this.phase = 'signedout'; this.render(); return; }
-      this.phase = 'ready';
+      const signedIn = await this.api.init();
+      if (!current()) return;
+      if (!signedIn) { this.phase = 'signedout'; this.render(); return; }
+      this.phase = 'ready'; clearTimeout(this.timer);
       this.timer = setTimeout(() => this.signedOut(), Math.max(0, Date.parse(this.api.expiresAt) - Date.now()));
       await this.organizations();
-    } catch (e) { if (e.code !== 'STALE_CONTEXT') this.error = e.message; }
-    if (this.isConnected) this.render();
+    } catch (e) { if (current() && e.code !== 'STALE_CONTEXT') this.error = e.message; }
+    if (current()) this.render();
   }
   async organizations() {
     const generation = this.api.generation;
@@ -37,17 +62,27 @@ class NavyixInvitations extends HTMLElement {
   async task(work) {
     if (this.busy || this.phase !== 'ready') return;
     this.busy = true; this.error = ''; const generation = this.api.generation; this.render();
-    try { const result = await work(); this.api.assertCurrent(generation); if (result?.kind) await this.saved(result); }
+    try {
+      const running = work(); this.syncNavigationGuard();
+      const result = await running; this.api.assertCurrent(generation); if (result?.kind) await this.saved(result);
+    }
     catch (e) { if (generation === this.api.generation && e.code !== 'STALE_CONTEXT') { this.error = e.message; if ([403,404].includes(e.status)) { this.created = null; this.client.rows = []; this.client.preview = null; } } }
     finally { if (generation === this.api.generation && this.isConnected) { this.busy = false; this.render(); this.shadowRoot.querySelector('[role="alert"], [role="status"]')?.focus(); } }
   }
   async saved(result) {
+    const generation = this.api.generation;
     this.notice = result.kind === 'accept' ? `Membership confirmed in ${result.organizationName}. Project access is assigned separately.` : result.kind === 'revoke' ? 'Invitation revoked.' : 'Invitation created. Share the code privately with the named recipient. No email was sent.';
     this.created = result.kind === 'create' ? result : null;
     if (result.kind === 'create') this.draft = { email: '', role: 'VIEWER', hours: 24 };
     if (result.kind === 'accept') { await this.organizations(); return; }
     try { await this.client.list(result.orgId); }
-    catch { this.notice += ' The save was confirmed, but the list could not refresh. Do not submit the creation again.'; }
+    catch (e) {
+      this.api.assertCurrent(generation);
+      if ([403, 404].includes(e.status)) {
+        this.created = null; this.client.rows = []; this.client.preview = null; this.client.adminGeneration = null;
+      }
+      this.notice += ' The save was confirmed, but the list could not refresh. Do not submit the creation again.';
+    }
   }
   async submit(event) {
     const form = event.target;
@@ -59,12 +94,22 @@ class NavyixInvitations extends HTMLElement {
     } else { const code = String(data.get('code')).trim(); await this.task(() => this.client.inspect(code)); }
   }
   async click(event) {
+    if (event.target.closest('a[href]') && this.client.pending) {
+      event.preventDefault();
+      this.error = 'Resolve the unconfirmed request before leaving. Sign-out clears the local retry, not the server operation.';
+      this.render(); return;
+    }
     const b = event.target.closest('[data-action]'); if (!b || this.busy) return;
     const action = b.dataset.action;
     if (action === 'logout') { await this.task(async () => { await this.api.logout(); this.channel?.postMessage('signed-out'); this.signedOut(); }); return; }
     if (action === 'copy') {
-      try { await navigator.clipboard.writeText(this.created.code); this.notice = 'Code copied. Share it only with the invited recipient.'; } catch { this.notice = 'Select the code field and copy it manually.'; }
-      this.render(); return;
+      const issued = this.created, generation = this.api.generation;
+      if (!issued) return;
+      let message;
+      try { await navigator.clipboard.writeText(issued.code); message = 'Code copied. Share it only with the invited recipient.'; }
+      catch { message = 'Select the code field and copy it manually.'; }
+      if (generation === this.api.generation && this.created === issued && this.isConnected) { this.notice = message; this.render(); }
+      return;
     }
     if (action === 'hide-code') { this.created = null; this.render(); return; }
     if (action === 'retry') { await this.task(() => this.client.retry()); return; }
@@ -82,19 +127,20 @@ class NavyixInvitations extends HTMLElement {
     }
   }
   render() {
+    this.syncNavigationGuard();
     const disabled = this.busy || Boolean(this.client.pending), p = this.client.preview;
     this.shadowRoot.innerHTML = `<link rel="stylesheet" href="/workbench/invitations.css"><main>
       <header><a class="brand" href="/workspace">NAVYIX<span>ENGINEERING READINESS</span></a><a href="/workspace">← Workspace</a>${this.api.authenticated ? '<button data-action="logout">Sign out</button>' : ''}</header>
       <div class="eyebrow">WORKSPACE / PEOPLE</div><h1>Bring the right people<br><em>into the right workspace.</em></h1>
       <p class="intro">Invite collaborators with a defined role. Confirm identity before membership. Keep project access separate.</p>
       ${this.error ? `<div role="alert" tabindex="-1" class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div role="status" tabindex="-1" class="notice">${esc(this.notice)}</div>` : ''}
-      ${this.client.pending ? '<div class="error" role="status">Response unconfirmed. Do not create a second request.<button data-action="retry">Retry original request</button></div>' : ''}
+      ${this.client.pending ? '<div class="error" role="status">Response unconfirmed. Do not create a second request or leave this page before resolving it.<button data-action="retry">Retry original request</button></div>' : ''}
       ${this.phase === 'loading' ? '<p role="status">Checking your session…</p>' : this.phase === 'signedout' ? '<section><h2>Sign in to continue</h2><p>Use the account matching your invitation. After sign-in, return to Invitations from the workspace.</p><form method="post" action="/api/browser/login"><button class="primary">Sign in securely →</button></form></section>' : `<div class="columns">
       <section><div class="eyebrow">01 / INVITE A COLLABORATOR</div><h2>Grow your team, deliberately.</h2><p>Only organization owners and administrators can create or revoke invitations.</p>
       <label for="org">Organization</label><select id="org" ${disabled ? 'disabled' : ''}><option value="" disabled ${!this.client.orgId ? 'selected' : ''}>Choose an organization</option>${this.orgs.map(o => `<option value="${esc(o.id)}" ${o.id === this.client.orgId ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select>
       ${this.moreOrganizations ? '<p>Only the first organization-directory page is available in this pilot screen.</p>' : ''}
       ${!this.orgs.length ? '<p>No administrable organizations on this page. You can still accept an invitation below.</p>' : ''}
-      <form id="invite-form"><fieldset ${disabled || !this.client.orgId ? 'disabled' : ''}><label for="email">Recipient email</label><input id="email" name="email" type="email" maxlength="254" required autocomplete="off" placeholder="colleague@company.com" value="${esc(this.draft.email)}">
+      <form id="invite-form"><fieldset ${disabled || !this.client.orgId || this.client.adminGeneration !== this.api.generation ? 'disabled' : ''}><label for="email">Recipient email</label><input id="email" name="email" type="email" maxlength="254" required autocomplete="off" placeholder="colleague@company.com" value="${esc(this.draft.email)}">
       <div class="pair"><div><label for="role">Organization role</label><select id="role" name="role"><option value="VIEWER" ${this.draft.role === 'VIEWER' ? 'selected' : ''}>Viewer</option><option value="CONTRIBUTOR" ${this.draft.role === 'CONTRIBUTOR' ? 'selected' : ''}>Contributor</option><option value="REVIEWER" ${this.draft.role === 'REVIEWER' ? 'selected' : ''}>Reviewer</option></select></div><div><label for="hours">Expires after</label><select id="hours" name="hours"><option value="24" ${this.draft.hours === 24 ? 'selected' : ''}>24 hours</option><option value="48" ${this.draft.hours === 48 ? 'selected' : ''}>48 hours</option><option value="72" ${this.draft.hours === 72 ? 'selected' : ''}>72 hours</option></select></div></div>
       <button class="primary" type="submit">Create invitation →</button></fieldset></form><p class="small">No automatic email. Codes are single-use and must be shared privately.</p>
       ${this.created ? `<div class="delivery"><h3>Code for ${esc(this.created.email)}</h3><label for="issued-code">Share this code privately</label><textarea id="issued-code" readonly spellcheck="false">${esc(this.created.code)}</textarea><div class="actions"><button data-action="copy">Copy code</button><button data-action="hide-code">Hide code</button></div></div>` : ''}</section>

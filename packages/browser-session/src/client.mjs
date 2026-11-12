@@ -5,12 +5,16 @@ export class WorkspaceError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }
 const error = (code, message) => new WorkspaceError(0, code, message);
+const freeze = value => {
+  if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
+  return value;
+};
 export class BrowserWorkspace {
   constructor({ fetcher = fetch, uuid = () => crypto.randomUUID(), onSessionLost = () => {} } = {}) {
     this.fetcher = fetcher; this.uuid = uuid; this.onSessionLost = onSessionLost; this.generation = 0;
     this.clear();
   }
-  clear() { this.authenticated = false; this.csrf = null; this.expiresAt = null; this.orgId = null; this.projects = []; this.project = null; this.buildId = null; this.readiness = {}; this.pending = null; }
+  clear() { this.authenticated = false; this.csrf = null; this.expiresAt = null; this.orgId = null; this.projects = []; this.project = null; this.buildId = null; this.readiness = {}; this.pending = null; this.writeFlight = null; }
   assertCurrent(version) { if (version !== this.generation) throw error('STALE_CONTEXT', 'Workspace context changed.'); }
   async request(path, { body, key, method = 'GET' } = {}) {
     const generation = this.generation;
@@ -92,20 +96,52 @@ export class BrowserWorkspace {
     throw error('REVISION_CHANGED', 'The project changed while loading. Reload before editing.');
   }
   async save(path, body) {
+    if (!this.authenticated) throw error('SIGN_IN_REQUIRED', 'Sign in first.');
     if (this.pending) throw error('PENDING_WRITE', 'Retry the pending save before starting another one.');
-    this.pending = { path, body: structuredClone(body), key: this.uuid(), generation: this.generation };
+    if (!UUID.test(this.orgId || '')) throw error('ORGANIZATION_REQUIRED', 'Connect an organization first.');
+    const root = `api/orgs/${this.orgId}/projects`;
+    const projectId = path === root ? null : this.project?.id;
+    if (path !== root && (!UUID.test(projectId || '') || path !== `${root}/${projectId}/commands` ||
+        !Number.isSafeInteger(body?.expectedRevision) || body.expectedRevision < 1 ||
+        body.expectedRevision !== this.project.revision || body.expectedRevision >= Number.MAX_SAFE_INTEGER))
+      throw error('INVALID_SAVE_TARGET', 'The save must match the current project and revision.');
+    let snapshot;
+    try { snapshot = freeze(JSON.parse(JSON.stringify(body))); }
+    catch { throw error('INVALID_SAVE_BODY', 'The save must contain serializable JSON.'); }
+    const key = this.uuid();
+    if (!UUID.test(key || '')) throw error('INVALID_REQUEST_ID', 'A valid save identifier is required.');
+    this.pending = Object.freeze({ path, body: snapshot, key, generation: this.generation, orgId: this.orgId,
+      projectId, revision: projectId ? snapshot.expectedRevision + 1 : 1 });
     return this.retry();
   }
   async retry() {
     const pending = this.pending;
     if (!pending) throw error('NO_PENDING_WRITE', 'There is no save to retry.');
+    // Check BEFORE sending: a previous session's request must not run as the current account.
+    if (!this.authenticated || pending.generation !== this.generation || pending.orgId !== this.orgId ||
+        (pending.projectId && pending.projectId !== this.project?.id)) {
+      if (this.pending === pending) this.pending = null;
+      throw error('STALE_CONTEXT', 'Session or project changed. Reconcile the earlier save in its original workspace.');
+    }
+    if (this.writeFlight?.pending === pending) return this.writeFlight.promise;
+    const flight = { pending, promise: null };
+    this.writeFlight = flight;
+    flight.promise = this.sendPending(pending).finally(() => { if (this.writeFlight === flight) this.writeFlight = null; });
+    return flight.promise;
+  }
+  async sendPending(pending) {
     try {
       const ack = await this.request(pending.path, { method: 'POST', body: pending.body, key: pending.key });
       this.assertCurrent(pending.generation);
+      if (this.pending !== pending) throw error('STALE_CONTEXT', 'Workspace context changed.');
+      // This matches the existing WorkflowService receipt contract, including create revision 1.
+      if (!ack || !UUID.test(ack.projectId || '') || ack.requestId !== pending.key ||
+          ack.revision !== pending.revision || (pending.projectId && ack.projectId !== pending.projectId))
+        throw error('INVALID_SAVE_ACK', 'The response does not confirm this save. Retry the original request.');
       this.pending = null;
-      return ack;
+      return { projectId: ack.projectId, revision: ack.revision, requestId: ack.requestId };
     } catch (e) {
-      if (this.pending === pending && e.status >= 400 && e.status < 500) this.pending = null;
+      if (this.pending === pending && e.status >= 400 && e.status < 500 && ![408, 429].includes(e.status)) this.pending = null;
       throw e;
     }
   }

@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BrowserWorkspace } from '../src/client.mjs';
-import { org, project, requestId } from './support/fixtures.mjs';
+// Client-only tests need identifiers, not the server session-handler fixture.
+const org = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const project = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const requestId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const second='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 function fixture(custom) {
  let revision=1;const calls=[];
