@@ -4,3 +4,6 @@ export { createHttpHandler } from './http.mjs';
 export { authConfig, createAuthenticator } from './auth.mjs';
 export { TeamService, PrismaTeamRepository } from './team.mjs';
 export { GitHubEvidenceService, githubConnections } from './github-evidence.mjs';
+export { EvidenceJournalService } from './evidence-journal.mjs';
+export { PrismaEvidenceJournalRepository } from './evidence-journal-repository.mjs';
+export { createEvidenceJournalHandler } from './evidence-journal-http.mjs';

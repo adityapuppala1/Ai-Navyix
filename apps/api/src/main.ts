@@ -18,6 +18,9 @@ async function bootstrap(): Promise<void> {
   const githubEnabled = process.env.NAVYIX_GITHUB_ENABLED;
   if (githubEnabled && !['true', 'false'].includes(githubEnabled)) throw new Error('NAVYIX_GITHUB_ENABLED must be true or false.');
   if (githubEnabled === 'true' && enabled !== 'true') throw new Error('GitHub evidence requires the authenticated API.');
+  const journalEnabled = process.env.NAVYIX_JOURNAL_ENABLED;
+  if (journalEnabled && !['true', 'false'].includes(journalEnabled)) throw new Error('NAVYIX_JOURNAL_ENABLED must be true or false.');
+  if (journalEnabled === 'true' && enabled !== 'true') throw new Error('Evidence history requires the authenticated API.');
   let disconnect: (() => Promise<void>) | undefined;
   try {
     if (enabled === 'true') {
@@ -38,6 +41,15 @@ async function bootstrap(): Promise<void> {
       }
       const service = new runtime.WorkflowService(repository);
       const githubService = githubEnabled === 'true' ? new runtime.GitHubEvidenceService(service, runtime.githubConnections(process.env)) : null;
+      if (journalEnabled === 'true') {
+        const journalRepository = new runtime.PrismaEvidenceJournalRepository(database);
+        await journalRepository.assertRuntime();
+        app.use('/v1/orgs', runtime.createEvidenceJournalHandler({
+          service: new runtime.EvidenceJournalService(journalRepository, githubService),
+          authenticate: runtime.createAuthenticator(config, jose),
+          onError: event => console.error(JSON.stringify(event))
+        }));
+      }
       app.use('/v1/orgs', runtime.createHttpHandler({
         service, teamService, githubService,
         authenticate: runtime.createAuthenticator(config, jose),

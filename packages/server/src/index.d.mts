@@ -23,3 +23,10 @@ export interface GitHubConnection {
 }
 export function githubConnections(env: Record<string, string | undefined>): readonly GitHubConnection[];
 export class GitHubEvidenceService { constructor(workflow: WorkflowService, connections: readonly GitHubConnection[]); }
+export class PrismaEvidenceJournalRepository { constructor(prisma: unknown); assertRuntime(): Promise<void>; }
+export class EvidenceJournalService { constructor(repository: PrismaEvidenceJournalRepository, collector: GitHubEvidenceService | null); }
+export function createEvidenceJournalHandler(options: {
+  service: EvidenceJournalService;
+  authenticate: (authorization: string | undefined) => Promise<Principal>;
+  onError?: (event: { requestId: string; code: string }) => void;
+}): (req: IncomingMessage, res: ServerResponse, next?: () => void) => Promise<void>;

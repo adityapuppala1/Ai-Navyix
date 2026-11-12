@@ -27,13 +27,13 @@ function redirect(location, cookies) {
   return new Response(null, { status: 303, headers: h });
 }
 function proxyTarget(url, method) {
-  const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|github-evidence|team|team/commands|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
+  const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|github-evidence|github-observations(?:/${UUID})?|team|team/commands|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
   if (!route) reject(404, 'NOT_FOUND', 'Unknown browser API route.');
   const [, , projectId, operation] = route;
-  const allowed = operation === 'commands' || operation === 'team/commands' || (!projectId && method === 'POST') ? 'POST' : 'GET';
+  const allowed = operation === 'commands' || operation === 'team/commands' || (operation === 'github-observations' && method === 'POST') || (!projectId && method === 'POST') ? 'POST' : 'GET';
   if (method !== allowed) reject(405, 'METHOD_NOT_ALLOWED', 'Method is not allowed for this route.');
   const keys = [...url.searchParams.keys()];
-  const valid = (!projectId && method === 'GET') || operation === 'team' ? ['after', 'limit'] : operation === 'readiness' ? ['stage', 'buildId', 'environment'] : operation === 'report-template' ? ['buildId'] : operation === 'github-evidence' ? ['buildId', 'runId', 'attempt'] : [];
+  const valid = (!projectId && method === 'GET') || operation === 'team' || (operation === 'github-observations' && method === 'GET') ? ['after', 'limit'] : operation === 'readiness' ? ['stage', 'buildId', 'environment'] : operation === 'report-template' ? ['buildId'] : operation === 'github-evidence' ? ['buildId', 'runId', 'attempt'] : [];
   if (new Set(keys).size !== keys.length || keys.some(k => !valid.includes(k))) reject(400, 'INVALID_QUERY', 'Unexpected or repeated query parameter.');
   for (const [k, v] of url.searchParams) {
     if ((k === 'after' && !id.test(v)) || (k === 'limit' && (!/^\d{1,2}$/.test(v) || +v < 1 || +v > 50)) ||
@@ -134,7 +134,7 @@ export function browserHandler({ config, store, oidc, fetcher = fetch, clock = D
         await store.deleteSession(s.key);
         return json({ error: { code: 'SESSION_EXPIRED', message: 'Sign in again.' } }, 401, [expiredCookie(config.sessionCookie)]);
       }
-      const evidenceRead = req.method === 'GET' && /\/github-evidence(?:\?|$)/.test(target);
+      const evidenceRead = req.method === 'GET' && /\/(?:github-evidence|github-observations)(?:[/?]|$)/.test(target);
       if (![200, 201, 400, 403, 404, 409, 413, 415, ...(evidenceRead ? [429, 502, 503] : [])].includes(response.status)) reject(502, 'BACKEND_UNAVAILABLE', 'The server could not confirm this operation. Retry the same request.');
       return json(value, response.status); // Upstream cookies, redirects and caching headers are never forwarded.
     } catch (error) {
