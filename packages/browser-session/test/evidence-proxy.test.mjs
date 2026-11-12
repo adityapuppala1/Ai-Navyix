@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fixture,org,project } from './support/fixtures.mjs';
+const path=`/api/browser/api/orgs/${org}/projects/${project}/github-evidence`;
+test('BFF forwards only an authenticated read with the server-held token',async()=>{const f=fixture();const s=await f.login();const r=await f.req(path+'?buildId=BLD-001&runId=30&attempt=1',{headers:{cookie:s.sessionCookie}});assert.equal(r.status,200);assert.equal(f.calls[0].init.method,'GET');assert.equal(f.calls[0].init.headers.authorization,'Bearer server-only-token');assert.equal(f.calls[0].init.body,undefined);});
+for(const suffix of ['?runId=0','?runId=9007199254740993','?attempt=1001','?attempt=1&attempt=2','?repository=evil/repo','?token=abc','?url=https://evil.test'])test(`proxy blocks ${suffix}`,async()=>{const f=fixture();const s=await f.login();assert.equal((await f.req(path+suffix,{headers:{cookie:s.sessionCookie}})).status,400);assert.equal(f.calls.length,0);});
+test('proxy never allows evidence POST',async()=>{const f=fixture();const s=await f.login();assert.equal((await f.post(path,s.sessionCookie,{})).status,405);assert.equal(f.calls.length,0);});
+for(const status of [429,502,503])test(`controlled evidence error ${status} reaches browser`,async()=>{const f=fixture({fetcher:async()=>Response.json({error:{code:'GITHUB_BACKOFF',message:'Wait'}},{status})});const s=await f.login();const r=await f.req(path,{headers:{cookie:s.sessionCookie}});assert.equal(r.status,status);assert.equal(r.headers.get('cache-control'),'no-store');});
+test('other routes retain previous 503 redaction behavior',async()=>{const f=fixture({fetcher:async()=>Response.json({error:{message:'private'}},{status:503})});const s=await f.login();const r=await f.req(`/api/browser/api/orgs/${org}/projects`,{headers:{cookie:s.sessionCookie}});assert.equal(r.status,502);assert.ok(!(await r.text()).includes('private'));});

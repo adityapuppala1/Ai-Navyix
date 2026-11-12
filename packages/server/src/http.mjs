@@ -32,7 +32,7 @@ function query(url, allowed) {
   return value;
 }
 /** Mounted within Nest/Express with bodyParser:false; no separate production server. */
-export function createHttpHandler({ service, authenticate, onError = () => {}, teamService = null }) {
+export function createHttpHandler({ service, authenticate, onError = () => {}, teamService = null, githubService = null }) {
   return async (req, res) => {
     const requestId = randomUUID();
     res.setHeader('Cache-Control', 'no-store');
@@ -51,6 +51,9 @@ export function createHttpHandler({ service, authenticate, onError = () => {}, t
       const orgId = parts[2], projectId = parts[4], tail = parts[5];
       if (!['GET', 'POST'].includes(req.method)) {
         res.setHeader('Allow', 'GET, POST'); throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
+      }
+      if (githubService && req.method === 'GET' && parts.length === 6 && tail === 'github-evidence') {
+        return send(200, await githubService.inspect(principal, orgId, projectId, query(url, ['buildId', 'runId', 'attempt'])));
       }
       if (teamService && req.method === 'GET' && parts.length === 6 && tail === 'team') {
         const q = query(url, ['after', 'limit']);

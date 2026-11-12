@@ -15,4 +15,11 @@ export function createHttpHandler(options: {
   authenticate: (authorization: string | undefined) => Promise<Principal>;
   onError?: (event: { requestId: string; code: string }) => void;
   teamService?: TeamService | null;
+  githubService?: GitHubEvidenceService | null;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+export interface GitHubConnection {
+  readonly orgId: string; readonly projectId: string; readonly repository: string; readonly repositoryId: number;
+  readonly workflowIds: readonly number[]; readonly requiredJobs: readonly string[]; readonly events: readonly string[]; readonly tokenEnv: string;
+}
+export function githubConnections(env: Record<string, string | undefined>): readonly GitHubConnection[];
+export class GitHubEvidenceService { constructor(workflow: WorkflowService, connections: readonly GitHubConnection[]); }

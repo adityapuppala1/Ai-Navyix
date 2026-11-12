@@ -15,6 +15,9 @@ async function bootstrap(): Promise<void> {
   const teamEnabled = process.env.NAVYIX_TEAM_ENABLED;
   if (teamEnabled && !['true', 'false'].includes(teamEnabled)) throw new Error('NAVYIX_TEAM_ENABLED must be true or false.');
   if (teamEnabled === 'true' && enabled !== 'true') throw new Error('Team management requires the authenticated API.');
+  const githubEnabled = process.env.NAVYIX_GITHUB_ENABLED;
+  if (githubEnabled && !['true', 'false'].includes(githubEnabled)) throw new Error('NAVYIX_GITHUB_ENABLED must be true or false.');
+  if (githubEnabled === 'true' && enabled !== 'true') throw new Error('GitHub evidence requires the authenticated API.');
   let disconnect: (() => Promise<void>) | undefined;
   try {
     if (enabled === 'true') {
@@ -33,8 +36,10 @@ async function bootstrap(): Promise<void> {
         await teamRepository.assertRuntime();
         teamService = new runtime.TeamService(teamRepository);
       }
+      const service = new runtime.WorkflowService(repository);
+      const githubService = githubEnabled === 'true' ? new runtime.GitHubEvidenceService(service, runtime.githubConnections(process.env)) : null;
       app.use('/v1/orgs', runtime.createHttpHandler({
-        service: new runtime.WorkflowService(repository), teamService,
+        service, teamService, githubService,
         authenticate: runtime.createAuthenticator(config, jose),
         onError: event => console.error(JSON.stringify(event))
       }));
