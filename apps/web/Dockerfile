@@ -6,8 +6,11 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY packages/policy/package.json packages/policy/package.json
 COPY packages/server/package.json packages/server/package.json
+COPY packages/browser-session/package.json packages/browser-session/package.json
 RUN pnpm install --no-frozen-lockfile
 COPY apps/web apps/web
+COPY packages/browser-session packages/browser-session
+COPY packages/server/src/auth.mjs packages/server/src/errors.mjs packages/server/src/
 COPY packages/workflow/src packages/workflow/src
 COPY scripts/sync-workbench.mjs scripts/sync-workbench.mjs
 COPY tsconfig.base.json ./

@@ -1,0 +1,11 @@
+import { readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const strict=process.argv.includes('--integration');
+if(process.argv.slice(2).some(arg=>arg!=='--integration'))throw new Error('Only --integration is supported.');
+const dir=path.join(root,'packages/browser-session/test');
+const files=readdirSync(dir).filter(name=>strict?name==='integration.test.mjs':name.endsWith('.test.mjs')).sort().map(name=>path.join(dir,name));
+const result=spawnSync(process.execPath,['--test',...files],{cwd:root,stdio:'inherit',env:{...process.env,...(strict?{NAVYIX_REQUIRE_BROWSER_INTEGRATION:'1'}:{})}});
+if(result.error)throw result.error;process.exit(result.status??1);

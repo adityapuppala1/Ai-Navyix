@@ -6,6 +6,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/policy/package.json packages/policy/package.json
 COPY packages/server/package.json packages/server/package.json
+COPY packages/browser-session/package.json packages/browser-session/package.json
 # Replace with a reviewed frozen lockfile after registry access is restored.
 RUN pnpm install --no-frozen-lockfile
 COPY apps/api apps/api
