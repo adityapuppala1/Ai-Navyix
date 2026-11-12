@@ -3,15 +3,10 @@ import { principalFromVerified } from '../../server/src/auth.mjs';
 import { BrowserError } from './config.mjs';
 import { equal } from './crypto.mjs';
 
-export async function limitedText(response, maxBytes) {
-  if (Number(response.headers.get('content-length')) > maxBytes) throw new Error('Response too large.');
-  const reader = response.body?.getReader(); if (!reader) return '';
-  const chunks = []; let bytes = 0;
-  try { for (;;) { const { value, done } = await reader.read(); if (done) break; bytes += value.byteLength;
-    if (bytes > maxBytes) throw new Error('Response too large.'); chunks.push(Buffer.from(value)); }
-  } finally { await reader.cancel().catch(() => {}); }
-  return Buffer.concat(chunks).toString('utf8');
-}
+import { limitedText, discardBody } from './body.mjs';
+// Preserve the existing internal import contract.
+export { limitedText } from './body.mjs';
+
 /** jwtVerify is supplied by the installed JOSE library in the application, never by browser input. */
 export function oidcClient(config, jose, fetcher = fetch, clock = Date.now) {
   const keys = jose.createRemoteJWKSet(new URL(config.jwksUrl), { timeoutDuration: 5000, cooldownDuration: 30000, cacheMaxAge: 600000 });
@@ -25,9 +20,10 @@ export function oidcClient(config, jose, fetcher = fetch, clock = Date.now) {
           const enc = x => new URLSearchParams({ x }).toString().slice(2);
           headers.authorization = `Basic ${Buffer.from(`${enc(config.clientId)}:${enc(config.clientSecret)}`).toString('base64')}`;
         }
-        const response = await fetcher(config.tokenUrl, { method: 'POST', headers, body: body.toString(), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(10000) });
-        if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) throw new Error('Token exchange failed.');
-        const tokens = JSON.parse(await limitedText(response, 65536));
+        const signal = AbortSignal.timeout(10000);
+        const response = await fetcher(config.tokenUrl, { method: 'POST', headers, body: body.toString(), redirect: 'error', cache: 'no-store', signal });
+        if (!response.ok || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) { discardBody(response); throw new Error('Token exchange failed.'); }
+        const tokens = JSON.parse(await limitedText(response, 65536, { signal }));
         const jwt = t => typeof t === 'string' && t.length <= 8192 && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(t);
         if (!jwt(tokens.id_token) || !jwt(tokens.access_token) || String(tokens.token_type).toLowerCase() !== 'bearer') throw new Error('Invalid token response.');
         const now = Math.floor(clock() / 1000);

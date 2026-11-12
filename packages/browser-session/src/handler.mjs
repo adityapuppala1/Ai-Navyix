@@ -1,6 +1,6 @@
 import { BrowserError, reject } from './config.mjs';
 import { randomToken, hash, challenge, equal, seal, unseal } from './crypto.mjs';
-import { limitedText } from './oidc.mjs';
+import { limitedText, discardBody } from './body.mjs';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const id = new RegExp(`^${UUID}$`, 'i');
@@ -120,15 +120,26 @@ export function browserHandler({ config, store, oidc, fetcher = fetch, clock = D
         const requestId = req.headers.get('idempotency-key');
         if (!id.test(requestId || '')) reject(400, 'IDEMPOTENCY_REQUIRED', 'A valid request ID is required.');
         try { body = await limitedText(req, 1_000_000); JSON.parse(body); }
-        catch (error) { reject(error.message === 'Response too large.' ? 413 : 400, 'INVALID_BODY', 'Request must contain JSON no larger than 1 MB.'); }
+        catch (error) {
+          if (error.code === 'BODY_TIMEOUT') reject(408, 'BODY_TIMEOUT', 'Upload did not finish in time. No operation was forwarded.');
+          if (error.code === 'BODY_ABORTED') reject(400, 'BODY_ABORTED', 'Upload was cancelled before forwarding.');
+          reject(error.code === 'BODY_TOO_LARGE' ? 413 : 400, 'INVALID_BODY', 'Request must contain valid UTF-8 JSON no larger than 1 MB.');
+        }
+        // Uploads can outlive a sign-out or session expiry. Recheck before dispatch, never replay automatically.
+        const current = await session(req);
+        if (current.key !== s.key || !equal(current.data.csrf, s.data.csrf) || !equal(current.data.accessToken, s.data.accessToken))
+          reject(401, 'SESSION_EXPIRED', 'Sign in again.');
         outgoing['content-type'] = 'application/json'; outgoing['idempotency-key'] = requestId;
       }
+      if (req.signal.aborted) reject(400, 'BODY_ABORTED', 'Request was cancelled before forwarding.');
+      // After dispatch a timeout/abort has an uncertain write outcome: return 502, not a safe-to-resubmit 4xx.
+      const upstreamSignal = AbortSignal.any([req.signal, AbortSignal.timeout(15000)]);
       let response, value;
       try {
         response = await fetcher(config.apiOrigin + target, { method: req.method, headers: outgoing, body,
-          redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000) });
-        if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) throw new Error('Expected JSON.');
-        value = JSON.parse(await limitedText(response, 4_000_000));
+          redirect: 'error', cache: 'no-store', signal: upstreamSignal });
+        if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) { discardBody(response); throw new Error('Expected JSON.'); }
+        value = JSON.parse(await limitedText(response, 4_000_000, { signal: upstreamSignal, timeoutMs: 15000 }));
       } catch { reject(502, 'BACKEND_UNAVAILABLE', 'The server could not confirm this operation. Retry the same request, not a new submission.'); }
       if (response.status === 401) {
         await store.deleteSession(s.key);
