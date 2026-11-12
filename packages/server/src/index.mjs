@@ -9,3 +9,7 @@ export { PrismaEvidenceJournalRepository } from './evidence-journal-repository.m
 export { createEvidenceJournalHandler } from './evidence-journal-http.mjs';
 export { OrganizationDirectoryService, PrismaOrganizationDirectory } from './organization-directory.mjs';
 export { createOrganizationDirectoryHandler } from './organization-directory-http.mjs';
+export { InvitationService } from './invitations.mjs';
+export { invitationConfig, InvitationIdentity } from './invitation-identity.mjs';
+export { PrismaInvitationRepository } from './invitation-repository.mjs';
+export { createInvitationHandler } from './invitation-http.mjs';

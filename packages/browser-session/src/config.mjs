@@ -31,9 +31,11 @@ export function browserConfig(env) {
   const clientSecret = env.NAVYIX_OIDC_CLIENT_SECRET;
   if (clientAuth === 'client_secret_basic' && (typeof clientSecret !== 'string' || !clientSecret || clientSecret.length > 4096)) throw new Error('Configure a confidential-client secret.');
   if (!/^[a-f0-9]{64}$/i.test(env.NAVYIX_SESSION_KEY || '')) throw new Error('NAVYIX_SESSION_KEY must be a random 32-byte hex key.');
+  if (env.NAVYIX_INVITATIONS_ENABLED && !['true','false'].includes(env.NAVYIX_INVITATIONS_ENABLED)) throw new Error('NAVYIX_INVITATIONS_ENABLED must be true or false.');
+  const invitationEmail = env.NAVYIX_INVITATIONS_ENABLED === 'true';
   const secure = origin.startsWith('https:');
   return Object.freeze({ origin, apiOrigin, issuer: env.OIDC_ISSUER, jwksUrl, authorizationUrl, tokenUrl, clientId, clientSecret,
-    clientAuth, scope, profile, audience: env.OIDC_AUDIENCE, key: Buffer.from(env.NAVYIX_SESSION_KEY, 'hex'), secure,
+    clientAuth, scope, invitationEmail, profile, audience: env.OIDC_AUDIENCE, key: Buffer.from(env.NAVYIX_SESSION_KEY, 'hex'), secure,
     sessionCookie: secure ? '__Host-navyix-session' : 'navyix-dev-session',
     loginCookie: secure ? '__Host-navyix-login' : 'navyix-dev-login',
     callbackUrl: `${origin}/api/browser/callback`, sessionSeconds: 3600, idleSeconds: 900, loginSeconds: 600 });

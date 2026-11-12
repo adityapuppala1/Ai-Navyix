@@ -37,3 +37,13 @@ export function createOrganizationDirectoryHandler(options: {
   authenticate: (authorization: string | undefined) => Promise<Principal>;
   onError?: (event: { requestId: string; code: string }) => void;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+export interface InvitationConfig { issuer: string; userinfoUrl: string; key: Buffer }
+export function invitationConfig(env: Record<string, string | undefined>): InvitationConfig | null;
+export class InvitationIdentity { constructor(config: InvitationConfig); }
+export class PrismaInvitationRepository { constructor(prisma: unknown); assertRuntime(): Promise<void>; }
+export class InvitationService { constructor(repository: PrismaInvitationRepository, options: { key: Buffer; identity: InvitationIdentity }); }
+export function createInvitationHandler(options: {
+  service: InvitationService;
+  authenticate: (authorization: string | undefined) => Promise<Principal>;
+  onError?: (event: { requestId: string; code: string }) => void;
+}): (req: IncomingMessage, res: ServerResponse, next?: () => void) => Promise<void>;

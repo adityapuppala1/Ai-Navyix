@@ -2,6 +2,7 @@ import { BrowserError, reject } from './config.mjs';
 import { randomToken, hash, challenge, equal, seal, unseal } from './crypto.mjs';
 import { limitedText, discardBody } from './body.mjs';
 import { organizationProxyTarget } from './organization-route.mjs';
+import { invitationProxyTarget } from './invitation-route.mjs';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const id = new RegExp(`^${UUID}$`, 'i');
@@ -28,6 +29,8 @@ function redirect(location, cookies) {
   return new Response(null, { status: 303, headers: h });
 }
 function proxyTarget(url, method) {
+  const invitationTarget = invitationProxyTarget(url, method);
+  if (invitationTarget) return invitationTarget;
   const organizationTarget = organizationProxyTarget(url, method);
   if (organizationTarget) return organizationTarget;
   const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|github-evidence|github-observations(?:/${UUID})?|team|team/commands|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
@@ -74,7 +77,7 @@ export function browserHandler({ config, store, oidc, fetcher = fetch, clock = D
         await store.putLogin(key, seal(transaction, config.key, context('login', key)), clock() + config.loginSeconds * 1000);
         const to = new URL(config.authorizationUrl);
         to.search = new URLSearchParams({ response_type: 'code', client_id: config.clientId, redirect_uri: config.callbackUrl,
-          scope: `openid ${config.scope}`, state, nonce, code_challenge: challenge(verifier), code_challenge_method: 'S256' }).toString();
+          scope: `openid ${config.scope}${config.invitationEmail ? ' email' : ''}`, state, nonce, code_challenge: challenge(verifier), code_challenge_method: 'S256' }).toString();
         return redirect(to.href, [setCookie(config, config.loginCookie, binding, config.loginSeconds)]);
       }
       if (path === '/api/browser/callback') {

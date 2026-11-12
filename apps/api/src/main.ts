@@ -24,6 +24,9 @@ async function bootstrap(): Promise<void> {
   const directoryEnabled = process.env.NAVYIX_DIRECTORY_ENABLED;
   if (directoryEnabled && !['true', 'false'].includes(directoryEnabled)) throw new Error('NAVYIX_DIRECTORY_ENABLED must be true or false.');
   if (directoryEnabled === 'true' && enabled !== 'true') throw new Error('Organization directory requires the authenticated API.');
+  const invitationsEnabled = process.env.NAVYIX_INVITATIONS_ENABLED;
+  if (invitationsEnabled && !['true', 'false'].includes(invitationsEnabled)) throw new Error('NAVYIX_INVITATIONS_ENABLED must be true or false.');
+  if (invitationsEnabled === 'true' && enabled !== 'true') throw new Error('Invitations require the authenticated API.');
   let disconnect: (() => Promise<void>) | undefined;
   try {
     if (enabled === 'true') {
@@ -41,6 +44,19 @@ async function bootstrap(): Promise<void> {
         const teamRepository = new runtime.PrismaTeamRepository(database);
         await teamRepository.assertRuntime();
         teamService = new runtime.TeamService(teamRepository);
+      }
+      if (invitationsEnabled === 'true') {
+        const invitationConfig = runtime.invitationConfig(process.env);
+        if (!invitationConfig) throw new Error('Invitation configuration is missing.');
+        const invitationRepository = new runtime.PrismaInvitationRepository(database);
+        await invitationRepository.assertRuntime();
+        app.use('/v1', runtime.createInvitationHandler({
+          service: new runtime.InvitationService(invitationRepository, {
+            key: invitationConfig.key, identity: new runtime.InvitationIdentity(invitationConfig)
+          }),
+          authenticate: runtime.createAuthenticator(config, jose),
+          onError: event => console.error(JSON.stringify(event))
+        }));
       }
       if (directoryEnabled === 'true') {
         const directoryRepository = new runtime.PrismaOrganizationDirectory(database);
