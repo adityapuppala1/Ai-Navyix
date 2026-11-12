@@ -11,4 +11,6 @@ await copyFile(path.join(root, 'packages/browser-session/src/client.mjs'), path.
 await copyFile(path.join(root, 'packages/browser-session/src/team-client.mjs'), path.join(destination, 'team-client.mjs'));
 await copyFile(path.join(root, 'packages/browser-session/src/evidence-client.mjs'), path.join(destination, 'evidence-client.mjs'));
 await copyFile(path.join(root, 'packages/browser-session/src/journal-client.mjs'), path.join(destination, 'journal-client.mjs'));
+await copyFile(path.join(root, 'apps/web/workbench/organization-picker.mjs'), path.join(destination, 'organization-picker.mjs'));
+await copyFile(path.join(root, 'packages/browser-session/src/organization-client.mjs'), path.join(destination, 'organization-client.mjs'));
 console.log('Navyix workbench assets synchronized from canonical source.');

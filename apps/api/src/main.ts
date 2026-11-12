@@ -21,6 +21,9 @@ async function bootstrap(): Promise<void> {
   const journalEnabled = process.env.NAVYIX_JOURNAL_ENABLED;
   if (journalEnabled && !['true', 'false'].includes(journalEnabled)) throw new Error('NAVYIX_JOURNAL_ENABLED must be true or false.');
   if (journalEnabled === 'true' && enabled !== 'true') throw new Error('Evidence history requires the authenticated API.');
+  const directoryEnabled = process.env.NAVYIX_DIRECTORY_ENABLED;
+  if (directoryEnabled && !['true', 'false'].includes(directoryEnabled)) throw new Error('NAVYIX_DIRECTORY_ENABLED must be true or false.');
+  if (directoryEnabled === 'true' && enabled !== 'true') throw new Error('Organization directory requires the authenticated API.');
   let disconnect: (() => Promise<void>) | undefined;
   try {
     if (enabled === 'true') {
@@ -38,6 +41,15 @@ async function bootstrap(): Promise<void> {
         const teamRepository = new runtime.PrismaTeamRepository(database);
         await teamRepository.assertRuntime();
         teamService = new runtime.TeamService(teamRepository);
+      }
+      if (directoryEnabled === 'true') {
+        const directoryRepository = new runtime.PrismaOrganizationDirectory(database);
+        await directoryRepository.assertRuntime();
+        app.use('/v1/me', runtime.createOrganizationDirectoryHandler({
+          service: new runtime.OrganizationDirectoryService(directoryRepository),
+          authenticate: runtime.createAuthenticator(config, jose),
+          onError: event => console.error(JSON.stringify(event))
+        }));
       }
       const service = new runtime.WorkflowService(repository);
       const githubService = githubEnabled === 'true' ? new runtime.GitHubEvidenceService(service, runtime.githubConnections(process.env)) : null;

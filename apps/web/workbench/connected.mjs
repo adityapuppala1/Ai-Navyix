@@ -1,4 +1,5 @@
 import './app.mjs';
+import './organization-picker.mjs';
 import { BrowserWorkspace } from './client.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -15,6 +16,22 @@ class NavyixConnectedWorkbench extends LocalWorkbench {
     super.connectedCallback();
     // Server mode neither observes nor reads the local preview's workspace.
     window.removeEventListener('storage', this.storageHandler);
+    this.organizationChoice = async event => {
+      const picker = this.root.querySelector('navyix-organization-picker');
+      if (this.busy || this.api.pending || this.phase !== 'organization' || event.target !== picker) return;
+      try {
+        // Only accept a choice from this currently loaded directory. API checks still decide access.
+        const orgId = picker.directory.select(event.detail?.orgId);
+        const label = picker.directory.rows.find(row => row.id === orgId)?.name;
+        event.preventDefault();
+        this.setBusy(true);
+        await this.api.connect(orgId);
+        this.organizationLabel = { id: orgId, name: label };
+        this.sync(); this.phase = 'ready'; this.error = ''; this.buildId = null; this.render();
+      } catch (e) { this.failure(e); }
+      finally { this.setBusy(false); }
+    };
+    this.root.addEventListener('navyix-organization-selected', this.organizationChoice);
     if (!this.shadowRoot.querySelector('[data-connected-style]')) {
       const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('./connected.css', import.meta.url).href;
       link.dataset.connectedStyle = ''; this.shadowRoot.append(link);
@@ -30,6 +47,7 @@ class NavyixConnectedWorkbench extends LocalWorkbench {
     }
   }
   disconnectedCallback() {
+    this.root?.removeEventListener('navyix-organization-selected', this.organizationChoice);
     window.removeEventListener('beforeunload', this.beforeLeave);
     window.removeEventListener('pagehide', this.hide); window.removeEventListener('pageshow', this.show);
     this.channel?.close(); clearTimeout(this.expiryTimer); this.api.generation++; this.api.clear(); super.disconnectedCallback();
@@ -105,8 +123,9 @@ class NavyixConnectedWorkbench extends LocalWorkbench {
       this.root.innerHTML = `<main class="server-shell"><section class="server-card"><a class="brand" href="/">NAVYIX</a><div class="eyebrow">DESIGN / BUILD / TEST / READINESS</div><h1>Your delivery story.<br><em>One connected workspace.</em></h1>
         <p>Work with your organization’s server records. Local preview data is never uploaded automatically.</p>
         ${this.error || new URLSearchParams(location.search).get('login') === 'failed' ? `<div class="alert error" role="alert">${escape(this.error || 'Sign-in was not completed. Please try again.')}</div>` : ''}
-        ${state === 'loading' ? '<p role="status">Checking your session and workspace…</p>' : state === 'signedout' ? '<form action="/api/browser/login" method="post"><button class="btn primary" type="submit">Sign in with your organization →</button></form><small>Use the account provisioned by your administrator. No token paste or password is collected here.</small>' : state === 'organization' ? '<form id="organization-form"><label class="field">Organization ID<input name="orgId" required autocomplete="off" placeholder="Organization UUID from your administrator" maxlength="36"></label><button class="btn primary" type="submit">Connect workspace →</button></form><small>Knowing this ID does not grant access. The server checks your membership.</small>' : (this.api.pending ? '<button class="btn primary" data-action="retry-save">Retry same save</button>' : '<button class="btn primary" data-action="reload">Retry connection</button><button class="btn" data-action="organization">Switch organization</button>')}
+        ${state === 'loading' ? '<p role="status">Checking your session and workspace…</p>' : state === 'signedout' ? '<form action="/api/browser/login" method="post"><button class="btn primary" type="submit">Sign in with your organization →</button></form><small>Use the account provisioned by your administrator. No token paste or password is collected here.</small>' : state === 'organization' ? this.hasAttribute('organization-picker') ? '<navyix-organization-picker></navyix-organization-picker>' : '<form id="organization-form"><label class="field">Organization ID<input name="orgId" required autocomplete="off" placeholder="Organization UUID from your administrator" maxlength="36"></label><button class="btn primary" type="submit">Connect workspace →</button></form><small>Knowing this ID does not grant access. The server checks your membership.</small>' : (this.api.pending ? '<button class="btn primary" data-action="retry-save">Retry same save</button>' : '<button class="btn primary" data-action="reload">Retry connection</button><button class="btn" data-action="organization">Switch organization</button>')}
         ${this.api.authenticated ? '<button class="btn" data-action="logout">Sign out</button>' : ''}<div class="server-boundary">Server sign-in · advisory readiness · approved access only</div></section></main>`;
+      this.root.querySelector('navyix-organization-picker')?.configure(this.api);
       this.root.querySelector('#organization-form')?.addEventListener('submit', async event => {
         event.preventDefault(); if (this.busy) return; this.setBusy(true);
         try { const data = new FormData(event.currentTarget); await this.api.connect(String(data.get('orgId')).trim()); this.sync(); this.phase = 'ready'; this.error = ''; this.buildId = null; this.render(); }
@@ -116,7 +135,7 @@ class NavyixConnectedWorkbench extends LocalWorkbench {
     }
     super.render();
     const set = (selector, value) => { const el = this.root.querySelector(selector); if (el) el.textContent = value; };
-    set('.local-card', `Organization · ${this.api.orgId}`);
+    set('.local-card', `Organization · ${this.organizationLabel?.id === this.api.orgId ? this.organizationLabel.name : this.api.orgId}`);
     set('.top-actions .pill', 'Server · advisory');
     set('.boundary p', 'Server-connected workspace. Access and saves are checked by the backend. Build/test evidence is user-supplied, not independently verified. No CI or AI job is started here.');
     set('footer span:last-child', `Connected workbench · ${this.api.projects.length} project(s)`);

@@ -30,3 +30,10 @@ export function createEvidenceJournalHandler(options: {
   authenticate: (authorization: string | undefined) => Promise<Principal>;
   onError?: (event: { requestId: string; code: string }) => void;
 }): (req: IncomingMessage, res: ServerResponse, next?: () => void) => Promise<void>;
+export class PrismaOrganizationDirectory { constructor(prisma: unknown); assertRuntime(): Promise<void>; }
+export class OrganizationDirectoryService { constructor(repository: PrismaOrganizationDirectory); }
+export function createOrganizationDirectoryHandler(options: {
+  service: OrganizationDirectoryService;
+  authenticate: (authorization: string | undefined) => Promise<Principal>;
+  onError?: (event: { requestId: string; code: string }) => void;
+}): (req: IncomingMessage, res: ServerResponse) => Promise<void>;

@@ -7,3 +7,5 @@ export { GitHubEvidenceService, githubConnections } from './github-evidence.mjs'
 export { EvidenceJournalService } from './evidence-journal.mjs';
 export { PrismaEvidenceJournalRepository } from './evidence-journal-repository.mjs';
 export { createEvidenceJournalHandler } from './evidence-journal-http.mjs';
+export { OrganizationDirectoryService, PrismaOrganizationDirectory } from './organization-directory.mjs';
+export { createOrganizationDirectoryHandler } from './organization-directory-http.mjs';

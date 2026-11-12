@@ -1,6 +1,7 @@
 import { BrowserError, reject } from './config.mjs';
 import { randomToken, hash, challenge, equal, seal, unseal } from './crypto.mjs';
 import { limitedText, discardBody } from './body.mjs';
+import { organizationProxyTarget } from './organization-route.mjs';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const id = new RegExp(`^${UUID}$`, 'i');
@@ -27,6 +28,8 @@ function redirect(location, cookies) {
   return new Response(null, { status: 303, headers: h });
 }
 function proxyTarget(url, method) {
+  const organizationTarget = organizationProxyTarget(url, method);
+  if (organizationTarget) return organizationTarget;
   const route = new RegExp(`^/api/browser/api/orgs/(${UUID})/projects(?:/(${UUID})(?:/(commands|readiness|report-template|github-evidence|github-observations(?:/${UUID})?|team|team/commands|assessments/ASM-\\d{3}))?)?$`, 'i').exec(url.pathname);
   if (!route) reject(404, 'NOT_FOUND', 'Unknown browser API route.');
   const [, , projectId, operation] = route;
