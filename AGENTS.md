@@ -10,3 +10,4 @@
 - Run `node --test packages/workflow/test/*.test.mjs` for this increment. Run the full existing policy tests, typecheck, lint and builds when dependencies are available; state exactly what was and was not executed.
 - Do not introduce authentication bypasses, default admin credentials, fabricated lockfiles, or secrets in source control.
 - Production readiness requires independent evidence provenance, server-side authorization, persistent data storage, audit controls and the documented acceptance gates.
+- Follow `docs/DELIVERY_PLAN.md` for sequencing. Prioritize complete-build and real integration blockers before expanding features; implemented-but-unvalidated code is not a completed acceptance gate.

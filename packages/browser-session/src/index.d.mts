@@ -11,3 +11,7 @@ export class PostgresSessions {
   deleteSession(id: string): Promise<void>;
   cleanup(now?: number): Promise<void>;
 }
+export function createBrowserRuntime(
+  initialize: () => Promise<(request: Request) => Promise<Response>>,
+  options?: { enabled?: () => boolean; onError?: (code: string) => void; clock?: () => number; retryAfterMs?: number }
+): (request: Request) => Promise<Response>;

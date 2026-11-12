@@ -16,6 +16,7 @@ const REQUIRED = [
   'packages/server/test/integration.test.mjs',
   'packages/server/test/team-live.test.mjs',
   'packages/server/test/journal-live.test.mjs',
+  'packages/server/test/workflow-shape-live.test.mjs',
   'packages/browser-session/test/integration.test.mjs',
   'packages/server/test/acceptance-live.test.mjs', 'scripts/verify-workspace.mjs'
 ];
@@ -211,7 +212,8 @@ export async function execute(root, settings, dependencies = {}) {
     const integrations = await step('Execute real JOSE and two-organization PostgreSQL acceptance', process.execPath,
       ['--test', '--test-concurrency=1', '--test-reporter=tap', 'packages/server/test/integration.test.mjs',
         'packages/browser-session/test/integration.test.mjs', 'packages/server/test/acceptance-live.test.mjs',
-        'packages/server/test/team-live.test.mjs', 'packages/server/test/journal-live.test.mjs'],
+        'packages/server/test/team-live.test.mjs', 'packages/server/test/journal-live.test.mjs',
+        'packages/server/test/workflow-shape-live.test.mjs'],
       { env: databaseEnv, timeout: 240_000 });
     report.integration = tapSummary(integrations.stdout);
     if (settings.full) {

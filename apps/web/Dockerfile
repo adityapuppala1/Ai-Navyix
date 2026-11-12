@@ -1,13 +1,16 @@
 FROM node:22-alpine AS build
 WORKDIR /workspace
 RUN corepack enable
-COPY package.json pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# Never copy developer registry credentials into an image layer.
+RUN printf 'engine-strict=true\n' > .npmrc
 COPY apps/web/package.json apps/web/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY packages/policy/package.json packages/policy/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/browser-session/package.json packages/browser-session/package.json
-RUN pnpm install --no-frozen-lockfile
+# Missing/outdated lockfile is a build failure; resolve and review it before building.
+RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/browser-session packages/browser-session
 COPY packages/server/src/auth.mjs packages/server/src/errors.mjs packages/server/src/
